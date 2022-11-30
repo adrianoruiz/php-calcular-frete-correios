@@ -1,91 +1,95 @@
 <?php
-/**
- *
- * @name php-calcular-frete-correios
- * @version 0.1
- * @author João Rangel
- * @license MIT License - http://www.opensource.org/licenses/mit-license.php
- *
- * For usage and examples, buy TopSundue:
- * 
- */
-class Frete {
 
-	const URL = "http://ws.correios.com.br/calculador/CalcPrecoPrazo.asmx/CalcPrecoPrazo?";
-	const SERVICE = "40010";
-	private $xml;
+//namespace ......;
 
-	public function __construct(
-		$CEPorigem,
-		$CEPdestino,
-		$peso,
-		$comprimento,
-		$altura,
-		$largura,
-		$valor
-	){
+class FreightCalculate
+{
+    public function __construct(
+        private string $code, //41106 - PAC , 40010 - SEDEX
+        private string $originZipCode,
+        private string $destinationZipCode,
+        private int $weight,
+        private int $length,
+        private int $height,
+        private int $width, //Min 10
+        private array $response = [],
+    ) {
+        $url = 'http://ws.correios.com.br/calculador/CalcPrecoPrazo.aspx';
 
-		if ($comprimento < 16) $comprimento = 16;
+        if ($length < 16) {
+            $this->length = 16;
+        }
 
-		$this->xml = simplexml_load_file(
-			Frete::URL."nCdEmpresa=&sDsSenha=&sCepOrigem=".$CEPorigem."&sCepDestino=".$CEPdestino."&nVlPeso=".$peso."&nCdFormato=1&nVlComprimento=".$comprimento."&nVlAltura=".$altura."&nVlLargura=".$largura."&sCdMaoPropria=n&nVlValorDeclarado=".$valor."&sCdAvisoRecebimento=n&nCdServico=".Frete::SERVICE."&nVlDiametro=0&StrRetorno=xml");
+         $params = [
+            'nCdEmpresa' => '',
+            'sDsSenha' => '',
+            'sCepOrigem' => $this->originZipCode,
+            'sCepDestino' => $this->destinationZipCode,
+            'nVlPeso' => $this->weight, //kg
+            'nCdFormato' => '1',  //1 para caixa / pacote e 2 para rolo/prisma.
+            'nVlComprimento' => $this->length,
+            'nVlAltura' => $this->height,
+            'nVlLargura' => $this->width,
+            'nVlDiametro' => '0',
+            'sCdMaoPropria' => 'n',
+            'nVlValorDeclarado' => '0',
+            'sCdAvisoRecebimento' => 'n',
+            'StrRetorno' => 'xml',
+            'nCdServico' =>  $this->code,
+        ];
 
-		if(!$this->xml->Servicos->cServico){
-	        throw new Exception("Error Processing Request", 400);
-	    }
+        $params = http_build_query($params);
 
-	    if ($this->xml->Servicos->cServico->Erro != '0' && !$this->xml->Servicos->cServico->Erro == '010') {
-	    	throw new Exception($this->xml->Servicos->cServico->MsgErro, 400);
-	    }
+        $curl = curl_init($url . '?' . $params);
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        $data = curl_exec($curl);
+        $data = simplexml_load_string($data);
 
-	}
+		print_r($data);
+		die();
 
-	public function getValor(){
+        foreach ($data->cServico as $service) {
+            if ($service->Erro == 0) {
+                $this->response['code'] = $service->Codigo ;
+                $this->response['value'] = $service->Valor;
+                $this->response['deadline'] = $service->PrazoEntrega ;
+            }
+        }
+    }
 
-		return (float)str_replace(',', '.', $this->xml->Servicos->cServico->Valor);
+    public function getValue(): float
+    {
+        return (float) $this->response['value'];
+    }
 
-	}
+    public function getDeadline(): int
+    {
+        return (int) $this->response['deadline'];
+    }
 
-	public function getPrazoEntrega(){
-
-		return (int)$this->xml->Servicos->cServico->PrazoEntrega;
-
-	}
-
-	public function getValorSemAdicionais(){
-
-		return (float)str_replace(',', '.', $this->xml->Servicos->cServico->ValorSemAdicionais);
-
-	}
-
-	public function getValorMaoPropria(){
-
-		return (float)str_replace(',', '.', $this->xml->Servicos->cServico->ValorMaoPropria);
-
-	}
-
-	public function getValorAvisoRecebimento(){
-
-		return (float)str_replace(',', '.', $this->xml->Servicos->cServico->ValorAvisoRecebimento);
-
-	}
-
-	public function getValorValorDeclarado(){
-
-		return (float)str_replace(',', '.', $this->xml->Servicos->cServico->ValorValorDeclarado);
-
-	}
-
-	public function getMsgErro(){
-
-		return $this->xml->Servicos->cServico->MsgErro;
-
-	}
-
-	public function getObs(){
-
-		return $this->xml->Servicos->cServico->obsFim;
-
-	}
-
+    public function getCode(): int
+    {
+        return (int) $this->response['deadline'];
+    }
 }
+
+// Teste
+	$cepDeOrigem = '85803690';
+    $cepDeDestino= '89012130' ;
+//     $peso = 2;
+//     $comprimento = 1;
+//     $altura = 1;
+//     $largura =1;
+//     $valor = 400;
+
+
+
+$frete = new FreightCalculate('41106',$cepDeOrigem, $cepDeDestino, 1, 5, 5, 10);
+
+// ...
+echo "getValor: "; 
+ $frete->getValue();
+
+// ...
+echo "<hr>getPrazoEntrega: "; 
+$frete->getDeadline();
